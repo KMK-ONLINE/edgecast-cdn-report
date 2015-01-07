@@ -2,195 +2,115 @@ require 'httparty'
 require 'date'
 require 'json'
 require 'byebug'
+require 'yaml'
+require 'active_support/core_ext/date/calculations.rb'
+require 'active_support/core_ext/time/calculations.rb'
+require 'terminal-table'
 
-$envs         = ['production', 'staging']
-$products     = ['liputan6', 'vidio']
-$cname_types  = ['assets', 'tv_streaming', 'eventstreaming','video', 'kickoff']
+class CdnReport
 
-$tb_inbytes   = 1000000000000
-$gb_inbytes   = 1000000000
-$mb_inbytes   = 1000000
-$underline    = "------------------"
+  BASE_URI = "https://api.edgecast.com/v2/reporting/customers"
 
-def get_total_use_data_by_month(begin_date_month)
-  t_use_data_month = HTTParty.get("#{$base_url}media/3/region/-1/units/2/trafficusage?begindate=#{begin_date_month}",
-                           :headers => {"Authorization" => "TOK:#{$header_token}"})
+  TB_INBYTES   = 10**12
+  GB_INBYTES   = 10**9
+  MB_INBYTES   = 10**6
 
-  json_parsed_curr  = JSON.parse("{\"data\":#{t_use_data_month.body.to_s}}")
-  return json_parsed_curr['data']['UsageResult']
-end
+  attr_accessor :customer_id, :token, :report_date
 
+  def initialize(config_file, report_date=Date.today)
+    config = YAML.load_file(config_file)
 
-def get_data(datestart,dateend)
-  domain_data = HTTParty.get("#{$base_url}media/3/cnamereportcodes?begindate=#{datestart}&enddate=#{dateend}",
-                          :headers => {"Authorization" => "TOK:#{$header_token}"})
-  domain_data_sort = JSON[domain_data.body.to_s].sort_by { |arry| arry['Bytes'].to_i }
+    self.customer_id = config['customer_id']
+    self.token = config['token']
+    self.report_date = report_date
+  end
 
-  data = Hash.new{ |h,k| h[k] = Hash.new(&h.default_proc) }
-  $envs.each do |env|
-    $products.each do |product|
-      domain_data_sort.each do |contain|
-        # assets
-        if (contain['Description'].include? env) && (contain['Description'].include? product) && !(contain['Description'].include? 'streaming') && !(contain['Description'].include? 'hls')
-           data[env][product]['assets'][contain['Description']]['bytes'] = contain['Bytes']
-        end
+  def base_uri
+    BASE_URI+'/'+customer_id
+  end
 
-        # tv_streaming
-        if (contain['Description'].include? env) && (contain['Description'].include? product) && (contain['Description'].include? 'livestreaming') && !(contain['Description'].include? 'hls')
-           data[env][product]['tv_streaming'][contain['Description']]['bytes'] = contain['Bytes']
-        end
+  def get uri
+    response = HTTParty.get(base_uri + uri, :headers => {"Authorization" => "TOK:#{token}"})
+    JSON.parse(response.body)
+  end
 
-        # event_streaming
-        if (contain['Description'].include? env) && (contain['Description'].include? product) && (contain['Description'].include? 'eventstreaming')
-           data[env][product]['eventstreaming'][contain['Description']]['bytes'] = contain['Bytes']
-        end
+  def total_data_transfer(month)
+    result = self.get "/media/3/region/-1/units/2/trafficusage?begindate=#{month}-01"
+    result['UsageResult'].to_f * GB_INBYTES
+  end
 
-        # video
-        if (contain['Description'].include? env) && (contain['Description'].include? product) && (contain['Description'].include? 'hls') && !(contain['Description'].include? 'kickoff')
-           data[env][product]['video'][contain['Description']]['bytes'] = contain['Bytes']
-        end
+  def data_transfer_by_cname(start_date, end_date)
+    result = self.get "/media/3/cnamereportcodes?begindate=#{start_date}&enddate=#{end_date}"
+    data_transfers = {}
 
-        # kickoff
-        if (contain['Description'].include? env) && (contain['Description'].include? product) && (contain['Description'].include? 'kickoff')
-           data[env][product]['kickoff'][contain['Description']]['bytes'] = contain['Bytes']
-        end
+    result.each do |cname_data|
+      data_transfers[cname_data['Description']] = cname_data['Bytes'].to_f
+    end
 
-      end
+    data_transfers
+  end
+
+  #month_to_date_data
+  def mtd_data_by_cname
+    @mtd_data_by_cname ||= data_transfer_by_cname(report_date.beginning_of_month, report_date)
+  end
+
+  #last_month_data
+  def lm_data_by_cname
+    @lm_data_by_cname ||= data_transfer_by_cname(report_date.last_month.beginning_of_month, report_date.last_month.end_of_month)
+  end
+
+  #last_month_to_date_data
+  def lmtd_data_by_cname
+    @lmtd_data_by_cname ||= data_transfer_by_cname(report_date.last_month.beginning_of_month, report_date.last_month)
+  end
+
+  #total_current_month_data
+  def tcm_data
+    @tcm_data ||= total_data_transfer(report_date.strftime("%Y-%m"));
+  end
+
+  #total_last_month_data
+  def tlm_data
+    @tlm_data ||= total_data_transfer(report_date.last_month.strftime("%Y-%m"))
+  end
+
+  def total_row
+    ['Total', f(tcm_data), '',  f(tlm_data)]
+  end
+
+  def cname_rows
+    cnames = [mtd_data_by_cname, lmtd_data_by_cname, lm_data_by_cname].flat_map(&:keys).uniq
+    cnames.map do |cname|
+      [cname, f(mtd_data_by_cname[cname]), f(lmtd_data_by_cname[cname]), f(lm_data_by_cname[cname])]
     end
   end
 
-  domain_data_sort.each do |contain|
-    if !(contain['Description'].include? $envs[0]) && !(contain['Description'].include? $envs[1])
-      data['others'][contain['Description']]['bytes'] = contain['Bytes']
+  def unaccounted_row
+    total_todate_cname     = mtd_data_by_cname.values.reduce(:+)
+    total_last_month_cname = lm_data_by_cname.values.reduce(:+)
+
+    ['Unaccounted', f(tcm_data-total_todate_cname), '', f(tlm_data-total_last_month_cname)]
+  end
+
+  #format
+  def f(bytes)
+    if bytes.nil?
+      "Na"
+    elsif(bytes/TB_INBYTES > 1)
+      (bytes.to_f/TB_INBYTES).round(2).to_s + ' TB'
+    elsif(bytes/GB_INBYTES > 1)
+      (bytes.to_f/GB_INBYTES).round(2).to_s + ' GB'
+    else
+      (bytes.to_f/MB_INBYTES).round(2).to_s + ' MB'
     end
   end
 
-  return data
-end
-
-def bytes_convertion(bytes)
-    if(bytes/$tb_inbytes > 1)
-      return ((bytes.to_f/$tb_inbytes).round(2)).to_s + ' TB'
-    end
-    if(bytes/$gb_inbytes > 1)
-      return ((bytes.to_f/$gb_inbytes).round(2)).to_s + ' GB'
-    end
-    return ((bytes.to_f/$mb_inbytes).round(2)).to_s + ' MB'
-end
-
-def bygroup(domain_data)
-  $envs.each do |env|
-    envbytes = 0
-    puts $underline
-    puts "##### #{env.upcase} #####"
-    puts $underline
-
-    $products.each do |product|
-      productbytes = 0
-      $cname_types.each do |cname_type|
-        total_cname_types = 0
-        buffer_cname = ""
-        domain_data[env][product][cname_type].each do |domain, usages|
-          total_cname_types += usages['bytes']
-          productbytes += usages['bytes']
-          buffer_cname += "CNAME : #{domain} : #{bytes_convertion(usages['bytes'])}\n"
-        end
-        puts "[ #{product.upcase} #{cname_type.upcase} : #{bytes_convertion(total_cname_types)} ]"
-        puts buffer_cname += "\n"
-        buffer_cname = ""
-      end
-
-      puts $underline
-      puts "### TOTAL #{product.upcase} : #{bytes_convertion(productbytes)} ###\n"
-      puts $underline
-
-      envbytes = envbytes + productbytes
-    end
-
-    puts $underline
-    puts "### TOTAL #{env.upcase} : #{bytes_convertion(envbytes)} ###\n"
-    puts $underline
+  def output
+    header = ['CNAME', 'Cur MTD', 'Last MTD', 'Last Total']
+    table = Terminal::Table.new headings: header, rows: (cname_rows  << unaccounted_row) << total_row
+    puts "Report CDN : #{report_date} \n"
+    puts table
   end
 
-  puts $underline
-  puts "##### ADS #####"
-  puts $underline
-  ads_bytes = 0
-  domain_data['others'].each do |domain, usages|
-    ads_bytes += usages['bytes']
-    puts "CNAME : #{domain} : #{bytes_convertion(usages['bytes'])} \n"
-  end
-  puts "### TOTAL ADS : #{bytes_convertion(ads_bytes)}"
-end
-
-def total_usage(domain_data)
-  totalbytes = 0
-  $envs.each do |env|
-    $products.each do |product|
-      $cname_types.each do |cname_type|
-        domain_data[env][product][cname_type].each do |domain,usages|
-          totalbytes = totalbytes + usages['bytes']
-        end
-      end
-    end
-  end
-
-  domain_data['others'].each do |domain, usages|
-    totalbytes = totalbytes + usages['bytes']
-  end
-  return totalbytes/$gb_inbytes
-end
-
-time    = Time.new().to_datetime << 1
-timenow = Time.new()
-lastmonth_begin_date = Time.utc(time.year, time.month,1)
-begin_date_lastmonth = lastmonth_begin_date.strftime("%Y-%m-%d")
-begin_date_thismonth = Time.utc(timenow.year, timenow.month,1).strftime("%Y-%m-%d")
-current_date = '2015-01-06'#Time.now.utc.strftime("%Y-%m-%d")
-
-if(ARGV[0] != nil)
-  begin_date_thismonth = ARGV[0]
-end
-if(ARGV[1] != nil)
-  current_date = ARGV[1]
-end
-
-puts "CDN EdgeCast Usage Report #{begin_date_thismonth} - #{current_date}"
-
-#get current month usage data
-current_month_usage = get_total_use_data_by_month(begin_date_thismonth)
-current_month_data  = get_data(begin_date_thismonth,current_date)
-
-puts $underline
-puts "\nCurrent Month Usage : #{(current_month_usage/1000).round(2)} TB"
-puts "UnAccounted Month Usage : #{((current_month_usage - total_usage(current_month_data))/1000).round(2)} TB"
-
-bygroup(current_month_data)
-
-if(ARGV.size == 0)
-  #get last month usage data
-  last_month_usage = get_total_use_data_by_month(begin_date_lastmonth)
-  last_month_data  = get_data(begin_date_lastmonth,begin_date_thismonth)
-
-  puts $underline
-  puts "\n\nLast Month Usage : #{last_month_usage/1000} TB"
-  puts "Unaccounted Last Month Usage : #{((last_month_usage - total_usage(last_month_data))/1000).round(2)} TB"
-  puts $underline
-  puts "LAST MONTH TOTAL SUMMARY"
-  puts $underline
-  bygroup(last_month_data)
-end
-
-#get current usage data by filename
-file_data = HTTParty.get("#{$base_url}media/3/filestats?begindate=#{begin_date_thismonth}&enddate=#{current_date}",
-                         :headers => {"Authorization" => "TOK:#{$header_token}"})
-
-file_data_sort = JSON[file_data.body.to_s].sort_by { |arry| arry['DataTransferred'].to_i }
-if(file_data_sort.size > 0)
-  puts $underline
-  file_data_sort.each do |kontain|
-    puts "Filename : #{kontain['Path']} : #{kontain['DataTransferred']/$gb_inbytes}G"
-  end
-  ## Just Print Some variable
-  puts $underline
 end

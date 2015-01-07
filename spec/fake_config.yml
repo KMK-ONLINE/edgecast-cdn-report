@@ -1,0 +1,3 @@
+base_url: https://api.edgecast.com/v2/reporting/customers/
+customer_id: fake_customer_id
+token: fake_token
