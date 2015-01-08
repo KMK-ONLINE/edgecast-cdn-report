@@ -43,4 +43,12 @@ Date : 2015-01-08
   The `token` should be the API token available on your Edgecast control panel. Your `customer_id` 
   is also available via your control panel.
   
-  
+## Running
+
+Once the configuration file is created just run 
+
+`rake`
+
+If the configuration file is named differently or located in a different directory run it as follows
+
+`rake default[/path/to/config.yml]`
