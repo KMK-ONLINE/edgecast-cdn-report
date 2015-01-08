@@ -5,6 +5,7 @@ require 'byebug'
 require 'yaml'
 require 'active_support/core_ext/date/calculations.rb'
 require 'active_support/core_ext/time/calculations.rb'
+require 'active_support/core_ext/hash/slice.rb'
 require 'terminal-table'
 
 class CdnReport
@@ -15,13 +16,14 @@ class CdnReport
   GB_INBYTES   = 10**9
   MB_INBYTES   = 10**6
 
-  attr_accessor :customer_id, :token, :report_date
+  attr_accessor :customer_id, :token, :report_date, :cname_groups
 
   def initialize(config_file, report_date=Date.today)
-    config = YAML.load_file(config_file)
+    @config = YAML.load_file(config_file)
 
-    self.customer_id = config['customer_id']
-    self.token = config['token']
+    self.customer_id = @config['customer_id']
+    self.token = @config['token']
+    self.cname_groups = @config['cname_groups']
     self.report_date = report_date
   end
 
@@ -86,6 +88,43 @@ class CdnReport
     end
   end
 
+  def sum_rows rows
+    rows.transpose.map do |row|
+      f(row.inject{ |sum, i| sum.to_f + i.to_f})
+    end
+  end
+
+  def hash_to_row h
+      h.map do |cname, data|
+        [cname, *data.map{|x| f(x)}]
+      end
+  end
+
+  def grouped_cname_rows
+    cnames = [mtd_data_by_cname, lmtd_data_by_cname, lm_data_by_cname].flat_map(&:keys).uniq
+
+    cname_data = {}
+    cnames.each do |cname|
+      cname_data[cname] = [mtd_data_by_cname[cname], lmtd_data_by_cname[cname], lm_data_by_cname[cname]]
+    end
+
+    grouped_cnames_data = []
+    cname_groups.each do |group, cnames|
+      group_cnames = cname_data.extract!(*cnames)
+
+      grouped_cnames_data << [group.upcase, *sum_rows(group_cnames.values)]
+
+      grouped_cnames_data += hash_to_row(group_cnames)
+    end
+
+    if (cname_data.length > 0)
+      grouped_cnames_data << ['Others', *sum_rows(cname_data.values)]
+      grouped_cnames_data += hash_to_row(cname_data)
+    end
+
+    grouped_cnames_data
+  end
+
   def unaccounted_row
     total_todate_cname     = mtd_data_by_cname.values.reduce(:+)
     total_last_month_cname = lm_data_by_cname.values.reduce(:+)
@@ -108,7 +147,19 @@ class CdnReport
 
   def output
     header = ['CNAME', 'Cur MTD', 'Last MTD', 'Last Total']
-    table = Terminal::Table.new headings: header, rows: (cname_rows  << unaccounted_row) << total_row
+    cname_group_names = cname_groups.keys.map(&:downcase)
+
+    table = Terminal::Table.new headings: header do |t|
+      t << total_row
+      t << :separator
+      t << unaccounted_row
+
+      grouped_cname_rows.each do |row|
+        t << :separator if (cname_group_names.include? row[0].downcase)
+        t << row
+      end
+    end
+
     puts "Report CDN : #{report_date} \n"
     puts table
   end

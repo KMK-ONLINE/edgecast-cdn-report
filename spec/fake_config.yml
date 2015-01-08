@@ -1,3 +1,9 @@
-base_url: https://api.edgecast.com/v2/reporting/customers/
 customer_id: fake_customer_id
 token: fake_token
+
+cname_groups:
+  fakedomain-a:
+    - cname1.fakedomain-a.com
+    - cname2.fakedomain-a.com
+  fakedomain-b:
+    - cname1.fakedomain-b.com

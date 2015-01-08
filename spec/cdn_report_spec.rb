@@ -10,12 +10,17 @@ describe CdnReport  do
     report_date = Date.strptime('2014-12-15')
     month_to_date_response = [{
       Bytes: 1*(10**12),
-      Description: "cname1.fakedomain.com",
+      Description: "cname1.fakedomain-a.com",
       Hits: 21873348,
       ReportCode: 10042
     },{
       Bytes: 2*(10**12),
-      Description: "cname2.fakedomain.com",
+      Description: "cname2.fakedomain-a.com",
+      Hits: 34243537,
+      ReportCode: 10044
+    },{
+      Bytes: 3*(10**12),
+      Description: "cname3.fakedomain-a.com",
       Hits: 34243537,
       ReportCode: 10044
     }]
@@ -25,12 +30,17 @@ describe CdnReport  do
 
     last_month_to_date_response = [{
       Bytes: 2.5*(10**12),
-      Description: "cname1.fakedomain.com",
+      Description: "cname1.fakedomain-a.com",
       Hits: 21873348,
       ReportCode: 10042
     },{
       Bytes: 1.5*(10**12),
-      Description: "cname2.fakedomain.com",
+      Description: "cname2.fakedomain-a.com",
+      Hits: 34243537,
+      ReportCode: 10044
+    },{
+      Bytes: 0.5*(10**12),
+      Description: "cname3.fakedomain-a.com",
       Hits: 34243537,
       ReportCode: 10044
     }]
@@ -40,12 +50,17 @@ describe CdnReport  do
 
     last_month_total_response = [{
       Bytes: 3*(10**12),
-      Description: "cname1.fakedomain.com",
+      Description: "cname1.fakedomain-a.com",
       Hits: 21873348,
       ReportCode: 10042
     },{
       Bytes: 2*(10**12),
-      Description: "cname2.fakedomain.com",
+      Description: "cname2.fakedomain-a.com",
+      Hits: 34243537,
+      ReportCode: 10044
+    },{
+      Bytes: 1*(10**12),
+      Description: "cname3.fakedomain-a.com",
       Hits: 34243537,
       ReportCode: 10044
     }]
@@ -55,11 +70,11 @@ describe CdnReport  do
 
     stub_request(:get, "https://api.edgecast.com/v2/reporting/customers/fake_customer_id/media/3/region/-1/units/2/trafficusage?begindate=#{report_date.beginning_of_month.strftime('%Y-%m-%d')}").
       with(:headers => {'Authorization'=>'TOK:fake_token'}).
-      to_return(:status => 200, :body => '{"UsageResult" : 4000}', :headers => {})
+      to_return(:status => 200, :body => '{"UsageResult" : 7000}', :headers => {})
 
     stub_request(:get, "https://api.edgecast.com/v2/reporting/customers/fake_customer_id/media/3/region/-1/units/2/trafficusage?begindate=#{report_date.last_month.beginning_of_month.strftime('%Y-%m-%d')}").
       with(:headers => {'Authorization'=>'TOK:fake_token'}).
-      to_return(:status => 200, :body => '{"UsageResult" : 5500}', :headers => {})
+      to_return(:status => 200, :body => '{"UsageResult" : 6500}', :headers => {})
   end
 
   describe '.initialize' do
@@ -81,22 +96,38 @@ describe CdnReport  do
   describe '#data_transfer_total' do
     it 'returns the total GB data transfer for a specific month' do
       cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml')
-      cdn_report.total_data_transfer('2014-12').must_equal 4*(10**12)
+      cdn_report.total_data_transfer('2014-12').must_equal 7*(10**12)
     end
   end
 
   describe '#data_transfer_by_cname' do
     it 'returns the GB data transfer by cname for a period' do
       report_date = Date.strptime('2014-12-15')
+      expected_result = {
+        'cname1.fakedomain-a.com' => 1*(10**12), 
+        'cname2.fakedomain-a.com' => 2*(10**12),
+        'cname3.fakedomain-a.com' => 3*(10**12)
+      }
       cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml')
-      cdn_report.data_transfer_by_cname(report_date.beginning_of_month, report_date).must_equal({'cname1.fakedomain.com' => 1*(10**12), 'cname2.fakedomain.com' => 2*(10**12)})
+      cdn_report.data_transfer_by_cname(report_date.beginning_of_month, report_date).must_equal(expected_result)
     end
   end
 
   describe '#total_row' do
     it 'returns an array of total data transfered for current, last month to date, last month total' do
       cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-01'))
-      cdn_report.total_row.must_equal ['Total', '4.0 TB', '', '5.5 TB']
+      cdn_report.total_row.must_equal ['Total', '7.0 TB', '', '6.5 TB']
+    end
+  end
+
+  describe '#sum_rows' do
+    it 'return sum of rows' do
+      rows = [
+        [10*(10**6), 20*(10**6), 30*(10**6)],
+        [15*(10**6), nil, 35*(10**6)]
+      ]
+      cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-01'))
+      cdn_report.sum_rows(rows).must_equal ['25.0 MB', '20.0 MB', '65.0 MB']
     end
   end
 
@@ -104,8 +135,32 @@ describe CdnReport  do
     it 'returns all cnames with current month to date , last month to date, and last month total' do
       cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-15'))
       cdn_report.cname_rows.must_equal [
-        ['cname1.fakedomain.com', '1000.0 GB', '2.5 TB', '3.0 TB'],
-        ['cname2.fakedomain.com', '2.0 TB', '1.5 TB', '2.0 TB']
+        ['cname1.fakedomain-a.com', '1000.0 GB', '2.5 TB', '3.0 TB'],
+        ['cname2.fakedomain-a.com', '2.0 TB', '1.5 TB', '2.0 TB'],
+        ['cname3.fakedomain-a.com', '3.0 TB', '500.0 GB', '1000.0 GB']
+      ]
+    end
+  end
+
+  describe "#cname_groups" do
+    it 'return all cnames in config' do
+      config_file = File.dirname(__FILE__)+'/fake_config.yml'
+      cname_groups = {"fakedomain-a"=>["cname1.fakedomain-a.com", "cname2.fakedomain-a.com"], "fakedomain-b"=>["cname1.fakedomain-b.com"]}
+      cdn_report = CdnReport.new(config_file, Date.strptime('2014-12-15'))
+      cdn_report.cname_groups.must_equal cname_groups
+    end
+  end
+
+  describe '#grouped_cname_rows' do
+    it 'returns all cnames with current month to date , last month to date, and last month total' do
+      cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-15'))
+      cdn_report.grouped_cname_rows.must_equal [
+        ['FAKEDOMAIN-A', '3.0 TB', '4.0 TB', '5.0 TB'],
+        ['cname1.fakedomain-a.com', '1000.0 GB', '2.5 TB', '3.0 TB'],
+        ['cname2.fakedomain-a.com', '2.0 TB', '1.5 TB', '2.0 TB'],
+        ['FAKEDOMAIN-B'],
+        ['Others', '3.0 TB', '500.0 GB', '1000.0 GB'],
+        ['cname3.fakedomain-a.com', '3.0 TB', '500.0 GB', '1000.0 GB'],
       ]
     end
   end

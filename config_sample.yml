@@ -1,3 +1,9 @@
 customer_id: AS12
 token: asdfhasdhfa-123213-12jjhj21
 
+cname_groups:
+  fakedomain-a:
+    - cname1.fakedomain-a.com
+    - cname2.fakedomain-a.com
+  fakedomain-b:
+    - cname1.fakedomain-b.com
