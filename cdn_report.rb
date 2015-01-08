@@ -160,7 +160,7 @@ class CdnReport
       end
     end
 
-    puts "Report CDN : #{report_date} \n"
+    puts "Date : #{report_date} \n"
     puts table
   end
 
