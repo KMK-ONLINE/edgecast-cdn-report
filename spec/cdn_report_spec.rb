@@ -131,17 +131,6 @@ describe CdnReport  do
     end
   end
 
-  describe '#cname_rows' do
-    it 'returns all cnames with current month to date , last month to date, and last month total' do
-      cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-15'))
-      cdn_report.cname_rows.must_equal [
-        ['cname1.fakedomain-a.com', '1000.0 GB', '2.5 TB', '3.0 TB'],
-        ['cname2.fakedomain-a.com', '2.0 TB', '1.5 TB', '2.0 TB'],
-        ['cname3.fakedomain-a.com', '3.0 TB', '500.0 GB', '1000.0 GB']
-      ]
-    end
-  end
-
   describe "#cname_groups" do
     it 'return all cnames in config' do
       config_file = File.dirname(__FILE__)+'/fake_config.yml'

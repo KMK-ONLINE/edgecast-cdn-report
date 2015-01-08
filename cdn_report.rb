@@ -81,13 +81,6 @@ class CdnReport
     ['Total', f(tcm_data), '',  f(tlm_data)]
   end
 
-  def cname_rows
-    cnames = [mtd_data_by_cname, lmtd_data_by_cname, lm_data_by_cname].flat_map(&:keys).uniq
-    cnames.map do |cname|
-      [cname, f(mtd_data_by_cname[cname]), f(lmtd_data_by_cname[cname]), f(lm_data_by_cname[cname])]
-    end
-  end
-
   def sum_rows rows
     rows.transpose.map do |row|
       f(row.inject{ |sum, i| sum.to_f + i.to_f})
