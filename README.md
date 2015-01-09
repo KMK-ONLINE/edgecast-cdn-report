@@ -26,19 +26,13 @@ Date : 2015-01-08
 | cdn1-e.staging.fakedomain-b.static.com            | 69.6 MB   | 124.74 MB | 395.8 MB   |
 +---------------------------------------------------+-----------+-----------+------------+
 
-```
-
 ## Installation
 
 0. Pre-requisites - ensure you have a working Ruby setup and have the bundler gem installed.
 
-1. Checkout this repo
-  `git clone https://github.com/KMK-ONLINE/edgecast-cdn-report.git`
+1. ~install it through rubygems `gem install edgecast_cdn_report`
   
-2. Install dependencies
-  `cd edgecast-cdn-report; bundle`
-  
-3. Copy the sample config file and customize it
+2. Copy the sample config file and customize it
   ` cp config_sample.yml config.yml`
   The `token` should be the API token available on your Edgecast control panel. Your `customer_id` 
   is also available via your control panel.
@@ -47,8 +41,8 @@ Date : 2015-01-08
 
 Once the configuration file is created just run 
 
-`rake`
+`edgecast_cdn_report config.yml`
 
 If the configuration file is named differently or located in a different directory run it as follows
 
-`rake default[/path/to/config.yml]`
+`edgecast_cdn_report /path/to/config.yml`
