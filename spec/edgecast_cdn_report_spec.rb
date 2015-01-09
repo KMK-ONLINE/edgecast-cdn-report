@@ -2,9 +2,9 @@ require 'minitest/autorun'
 require 'webmock/minitest'
 WebMock.disable_net_connect!(allow_localhost: true)
 
-require_relative '../cdn_report'
+require_relative '../lib/edgecast_cdn_report'
 
-describe CdnReport  do
+describe EdgecastCdnReport  do
 
   before do
     report_date = Date.strptime('2014-12-15')
@@ -79,14 +79,14 @@ describe CdnReport  do
 
   describe '.initialize' do
     it 'takes a path to the config file and sets the token and customer_id' do
-      cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml')
+      cdn_report = EdgecastCdnReport.new(File.dirname(__FILE__)+'/fake_config.yml')
       cdn_report.customer_id.must_equal 'fake_customer_id'
       cdn_report.token.must_equal 'fake_token'
     end
 
     it 'takes an optional report_date' do
       expected_report_date = Date.strptime('2014-12-12')
-      cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', expected_report_date)
+      cdn_report = EdgecastCdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', expected_report_date)
       cdn_report.customer_id.must_equal 'fake_customer_id'
       cdn_report.token.must_equal 'fake_token'
       cdn_report.report_date.must_equal expected_report_date
@@ -95,7 +95,7 @@ describe CdnReport  do
 
   describe '#data_transfer_total' do
     it 'returns the total GB data transfer for a specific month' do
-      cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml')
+      cdn_report = EdgecastCdnReport.new(File.dirname(__FILE__)+'/fake_config.yml')
       cdn_report.total_data_transfer('2014-12').must_equal 7*(10**12)
     end
   end
@@ -108,14 +108,14 @@ describe CdnReport  do
         'cname2.fakedomain-a.com' => 2*(10**12),
         'cname3.fakedomain-a.com' => 3*(10**12)
       }
-      cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml')
+      cdn_report = EdgecastCdnReport.new(File.dirname(__FILE__)+'/fake_config.yml')
       cdn_report.data_transfer_by_cname(report_date.beginning_of_month, report_date).must_equal(expected_result)
     end
   end
 
   describe '#total_row' do
     it 'returns an array of total data transfered for current, last month to date, last month total' do
-      cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-01'))
+      cdn_report = EdgecastCdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-01'))
       cdn_report.total_row.must_equal ['Total', '7.0 TB', '', '6.5 TB']
     end
   end
@@ -126,7 +126,7 @@ describe CdnReport  do
         [10*(10**6), 20*(10**6), 30*(10**6)],
         [15*(10**6), nil, 35*(10**6)]
       ]
-      cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-01'))
+      cdn_report = EdgecastCdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-01'))
       cdn_report.sum_rows(rows).must_equal ['25.0 MB', '20.0 MB', '65.0 MB']
     end
   end
@@ -135,14 +135,14 @@ describe CdnReport  do
     it 'return all cnames in config' do
       config_file = File.dirname(__FILE__)+'/fake_config.yml'
       cname_groups = {"fakedomain-a"=>["cname1.fakedomain-a.com", "cname2.fakedomain-a.com"], "fakedomain-b"=>["cname1.fakedomain-b.com"]}
-      cdn_report = CdnReport.new(config_file, Date.strptime('2014-12-15'))
+      cdn_report = EdgecastCdnReport.new(config_file, Date.strptime('2014-12-15'))
       cdn_report.cname_groups.must_equal cname_groups
     end
   end
 
   describe '#grouped_cname_rows' do
     it 'returns all cnames with current month to date , last month to date, and last month total' do
-      cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-15'))
+      cdn_report = EdgecastCdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-15'))
       cdn_report.grouped_cname_rows.must_equal [
         ['FAKEDOMAIN-A', '3.0 TB', '4.0 TB', '5.0 TB'],
         ['cname1.fakedomain-a.com', '1000.0 GB', '2.5 TB', '3.0 TB'],
@@ -156,7 +156,7 @@ describe CdnReport  do
 
   describe '#unaccounted_row' do
     it 'calculates the difference between the total data transferred and sum of the cname data transfered' do
-      cdn_report = CdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-15'))
+      cdn_report = EdgecastCdnReport.new(File.dirname(__FILE__)+'/fake_config.yml', Date.strptime('2014-12-15'))
       cdn_report.unaccounted_row.must_equal ['Unaccounted' , '1000.0 GB', '', '500.0 GB']
     end
   end

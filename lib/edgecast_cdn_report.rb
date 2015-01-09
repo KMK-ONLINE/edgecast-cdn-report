@@ -1,14 +1,13 @@
 require 'httparty'
 require 'date'
 require 'json'
-require 'byebug'
 require 'yaml'
 require 'active_support/core_ext/date/calculations.rb'
 require 'active_support/core_ext/time/calculations.rb'
 require 'active_support/core_ext/hash/slice.rb'
 require 'terminal-table'
 
-class CdnReport
+class EdgecastCdnReport
 
   BASE_URI = "https://api.edgecast.com/v2/reporting/customers"
 
@@ -19,6 +18,9 @@ class CdnReport
   attr_accessor :customer_id, :token, :report_date, :cname_groups
 
   def initialize(config_file, report_date=Date.today)
+    if config_file.nil?
+      raise "Please provide a config file #{config_file} "
+    end
     @config = YAML.load_file(config_file)
 
     self.customer_id = @config['customer_id']

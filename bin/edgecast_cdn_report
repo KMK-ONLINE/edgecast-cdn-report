@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+
+require 'edgecast_cdn_report'
+
+if ARGV.count
+  path_to_config = ARGV[0]
+else
+  path_to_config = 'config.yml'
+end
+
+EdgecastCdnReport.new(path_to_config).output
